@@ -1,0 +1,13 @@
+# Normalizza i fine riga nel repository (LF), lascia a git la conversione in checkout.
+* text=auto
+
+*.cs     text diff=csharp
+*.xaml   text
+*.csproj text
+*.slnx   text
+*.md     text
+
+*.dll    binary
+*.exe    binary
+*.ico    binary
+*.png    binary

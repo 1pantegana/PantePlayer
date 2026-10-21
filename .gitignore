@@ -1,0 +1,17 @@
+bin/
+obj/
+
+# 117 MB native binary: fetch it from the mpv winbuild releases instead (see README).
+src/LettoreVideo/runtimes/win-x64/native/libmpv-2.dll
+
+# Video di prova: contenuti di terzi, non vanno pubblicati.
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+
+# Impostazioni locali di Visual Studio / Rider.
+.vs/
+.idea/
+*.user
