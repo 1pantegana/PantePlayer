@@ -1,8 +1,12 @@
 bin/
 obj/
 
-# 117 MB native binary: fetch it from the mpv winbuild releases instead (see README).
-src/LettoreVideo/runtimes/win-x64/native/libmpv-2.dll
+# DLL di FFmpeg (build LGPL shared di BtbN, ~150 MB): si scaricano a parte (vedi README).
+src/LettoreVideo/runtimes/win-x64/native/ffmpeg/
+
+# Modulo NvFRUC privato: la licenza dell'Optical Flow SDK (§4.e) vieta di renderlo
+# soggetto a una licenza open source, quindi non va mai pubblicato.
+private/
 
 # Video di prova: contenuti di terzi, non vanno pubblicati.
 *.mp4

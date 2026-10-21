@@ -2,11 +2,13 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net11.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <!-- libmpv-2.dll is a native x64 binary: the app must never build as AnyCPU. -->
+    <!-- The engine talks to FFmpeg and D3D11 through raw pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The FFmpeg DLLs are native x64 binaries: the app must never build as AnyCPU. -->
     <PlatformTarget>x64</PlatformTarget>
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -17,15 +19,21 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Copied next to the exe so the default DllImport probing finds it. -->
-    <None Include="runtimes\win-x64\native\libmpv-2.dll">
-      <Link>libmpv-2.dll</Link>
+    <InternalsVisibleTo Include="LettoreVideo.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FFmpeg shared build, loaded at runtime from "ffmpeg\" next to the exe
+         (ffmpeg.RootPath). Not in git: see README. -->
+    <None Include="runtimes\win-x64\native\ffmpeg\*.dll">
+      <Link>ffmpeg\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="FFmpeg.AutoGen" Version="9.0.1.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
   </ItemGroup>
