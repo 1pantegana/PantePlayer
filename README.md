@@ -1,8 +1,9 @@
 # PantePlayer
 
-Lettore video desktop per Windows costruito attorno a **libmpv**, pensato per la
-coppia Ryzen 9000 + RTX 5080: apri una cartella e riproduce in sequenza tutti i
-video che contiene, con playlist laterale e NVIDIA RTX Video Super Resolution.
+Lettore video desktop per Windows ottimizzato per Ryzen 9000 + RTX 5080:
+
+- attivazione automatica di NVIDIA RTX Video Super Resolution se il video è sotto i 1080p
+- riproduce in sequenza tutti i video di una cartella, con playlist laterale
 
 ## Come si usa
 
