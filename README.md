@@ -50,9 +50,15 @@ mostra sempre lo stato effettivo e il perché.
 
 `RTX HDR` (`nvidia-true-hdr`) converte SDR→HDR: ha senso solo su schermo HDR.
 
-La qualità della VSR la decide il driver: in **NVIDIA App → Sistema → Video → RTX
-Video Enhancement** conviene impostare Super Resolution al livello **4**, che su una
-RTX 5080 costa poco.
+**Requisito: Super Resolution va attivata nel driver.** In **Pannello di controllo
+NVIDIA → Video → Regola le impostazioni dell'immagine video → Miglioramento video
+RTX** (oppure NVIDIA App → Sistema → Video) spunta **Super Resolution**. Se è spenta
+il driver accetta comunque il filtro (il log dice `NVIDIA RTX Super Resolution
+enabled`), ma il video viene ingrandito dallo scaler standard del processore video,
+più morbido di quello di mpv: in un confronto A/B sullo stesso fotogramma la
+nitidezza del testo è scesa del 30% con la casella spenta e salita del 59% con la
+casella attiva. La qualità la decide sempre il driver: il livello **4** su una RTX
+5080 costa poco.
 
 ## Movimento fluido
 
