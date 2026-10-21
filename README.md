@@ -4,8 +4,6 @@ Lettore video desktop per Windows ottimizzato per Ryzen 9000 + RTX 5080:
 
 * attivazione automatica di NVIDIA RTX Video Super Resolution se il video è sotto i 1080p
 
-* interpolazione dei fotogrammi automatica sotto i 45 fps (movimento fluido)
-
 * riproduce in sequenza tutti i video di una cartella, con playlist laterale.
 
 * motore di riproduzione (libmpv/FFmpeg) compilato per x86-64-v3 (AVX2), adatto a Zen 5
@@ -60,28 +58,6 @@ più morbido di quello di mpv: in un confronto A/B sullo stesso fotogramma la
 nitidezza del testo è scesa del 30% con la casella spenta e salita del 59% con la
 casella attiva. La qualità la decide sempre il driver: il livello **4** su una RTX
 5080 costa poco.
-
-## Movimento fluido
-
-Il selettore `Fluido` interpola i fotogrammi per agganciare il video alla
-frequenza del monitor, eliminando gli scatti dei film a 24/25/30 fps su schermi a
-60–144 Hz:
-
-| Modalità | Comportamento |
-|---|---|
-| **Auto** (default) | attivo solo per sorgenti sotto i 45 fps |
-| **Sempre ON** | attivo su qualsiasi sorgente |
-| **Sempre OFF** | disattivato |
-
-Usa `video-sync=display-resample` + `interpolation` (con `tscale=oversample`, che
-fonde i fotogrammi solo nei passaggi e lascia nitidi gli altri), applicati a caldo.
-Per restare agganciato, l'audio viene ricampionato di una frazione di punto
-percentuale: non si sente. Se il contenitore non dichiara gli fps (capita con i
-VP9/AV1 scaricati dal web), il lettore li misura sui primi fotogrammi decodificati.
-Quando è attivo il selettore ha una cornice verde; il tooltip mostra stato e motivo.
-
-Non crea fotogrammi intermedi stimando il movimento: un film a 24 fps resta a 24
-fps, ma con una cadenza regolare invece dell'alternanza 3:2 tipica dei 60 Hz.
 
 ## HDR nativo
 

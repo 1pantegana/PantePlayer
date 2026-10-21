@@ -188,17 +188,6 @@
                                    VerticalAlignment="Center"
                                    Foreground="{StaticResource Muted}" FontSize="12" Margin="0,0,10,0"/>
 
-                        <Border Style="{StaticResource ActiveFrame}" Tag="{Binding SmoothActive}"
-                                Margin="0,0,8,0">
-                            <ComboBox x:Name="SmoothModeBox" Width="150"
-                                      SelectionChanged="SmoothModeBox_SelectionChanged"
-                                      ToolTip="{Binding SmoothStatus}">
-                                <ComboBoxItem Content="Fluido: Auto &lt;45 fps" IsSelected="True"/>
-                                <ComboBoxItem Content="Fluido: sempre ON"/>
-                                <ComboBoxItem Content="Fluido: sempre OFF"/>
-                            </ComboBox>
-                        </Border>
-
                         <Border Style="{StaticResource ActiveFrame}" Tag="{Binding VsrActive}">
                             <ComboBox x:Name="VsrModeBox" Width="150"
                                       SelectionChanged="VsrModeBox_SelectionChanged"
