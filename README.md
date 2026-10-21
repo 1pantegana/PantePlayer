@@ -1,4 +1,4 @@
-# Lettore Video
+# PantePlayer
 
 Lettore video desktop per Windows costruito attorno a **libmpv**, pensato per la
 coppia Ryzen 9000 + RTX 5080: apri una cartella e riproduce in sequenza tutti i
@@ -82,7 +82,7 @@ non compilare mai come AnyCPU.
 
 ## Licenza
 
-Copyright (C) 2026 gli autori di Lettore Video.
+Copyright (C) 2026 1Pantegana.
 
 Questo programma è software libero: puoi ridistribuirlo e/o modificarlo secondo i
 termini della **GNU General Public License** pubblicata dalla Free Software
