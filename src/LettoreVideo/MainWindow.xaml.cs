@@ -126,7 +126,7 @@ public partial class MainWindow : Window
 
     #endregion
 
-    #region RTX VSR
+    #region RTX VSR e Fluido
 
     private void VsrModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -137,6 +137,18 @@ public partial class MainWindow : Window
             1 => RtxVsrMode.Always,
             2 => RtxVsrMode.Off,
             _ => RtxVsrMode.Auto,
+        };
+    }
+
+    private void SmoothModeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is null) return;
+
+        _vm.SmoothMode = SmoothModeBox.SelectedIndex switch
+        {
+            1 => SmoothMotionMode.Always,
+            2 => SmoothMotionMode.Off,
+            _ => SmoothMotionMode.Auto,
         };
     }
 

@@ -4,6 +4,8 @@ Lettore video desktop per Windows ottimizzato per Ryzen 9000 + RTX 5080:
 
 * attivazione automatica di NVIDIA RTX Video Super Resolution se il video è sotto i 1080p
 
+* interpolazione dei fotogrammi automatica sotto i 45 fps (movimento fluido)
+
 * riproduce in sequenza tutti i video di una cartella, con playlist laterale.
 
 * motore di riproduzione (libmpv/FFmpeg) compilato per x86-64-v3 (AVX2), adatto a Zen 5
@@ -47,6 +49,35 @@ e il fattore di upscale è calcolato sull'altezza reale in pixel dell'area video
 mostra sempre lo stato effettivo e il perché.
 
 `RTX HDR` (`nvidia-true-hdr`) converte SDR→HDR: ha senso solo su schermo HDR.
+
+La qualità della VSR la decide il driver: in **NVIDIA App → Sistema → Video → RTX
+Video Enhancement** conviene impostare Super Resolution al livello **4**, che su una
+RTX 5080 costa poco.
+
+## Movimento fluido
+
+Il selettore `Fluido` interpola i fotogrammi per agganciare il video alla
+frequenza del monitor, eliminando gli scatti dei film a 24/25/30 fps su schermi a
+60–144 Hz:
+
+| Modalità | Comportamento |
+|---|---|
+| **Auto** (default) | attivo solo per sorgenti sotto i 45 fps |
+| **Sempre ON** | attivo su qualsiasi sorgente |
+| **Sempre OFF** | disattivato |
+
+Usa `video-sync=display-resample` + `interpolation` (con `tscale=oversample`, che
+fonde i fotogrammi solo nei passaggi e lascia nitidi gli altri), applicati a caldo.
+Per restare agganciato, l'audio viene ricampionato di una frazione di punto
+percentuale: non si sente. Se il contenitore non dichiara gli fps (capita con i
+VP9/AV1 scaricati dal web), il lettore li misura sui primi fotogrammi decodificati.
+Il tooltip del selettore mostra stato e motivo.
+
+## HDR nativo
+
+`HDR nativo` (`target-colorspace-hint`) passa allo schermo i metadati HDR10 dei
+video HDR invece di convertirli in SDR. Funziona solo su un monitor HDR con l'HDR
+attivo nelle impostazioni di Windows: per questo parte spento.
 
 ## Scelte tecniche
 

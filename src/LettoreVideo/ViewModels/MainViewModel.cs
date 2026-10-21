@@ -64,6 +64,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _mpv.SetOption("gpu-context", "d3d11");
         _mpv.SetOption("profile", "high-quality");
 
+        // --- Frame interpolation ("Fluido"): video-sync and interpolation are
+        //     switched at runtime by ApplySmoothMotion; tscale only matters while
+        //     interpolation is on. oversample keeps frames sharp and only blends
+        //     at the transitions, instead of smearing every frame. ---
+        _mpv.SetOption("tscale", "oversample");
+
+        // --- HDR passthrough: off until the user enables it. With gpu-next on D3D11
+        //     the hint also switches the swapchain to HDR10 by itself, so the output
+        //     format stays on auto — a fixed 10-bit swapchain would only cost an SDR
+        //     monitor its 8-bit dithering. ---
+        _mpv.SetOption("target-colorspace-hint", "no");
+
         // --- Decoding: NVDEC on the RTX 5080, keeping frames in D3D11 textures
         //     (plain "d3d11va", never "-copy", which is what d3d11vpp requires). ---
         _mpv.SetOption("hwdec", "d3d11va");
@@ -108,6 +120,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _mpv.ObserveProperty("duration", MpvNative.MPV_FORMAT_DOUBLE);
         _mpv.ObserveProperty("pause", MpvNative.MPV_FORMAT_FLAG);
         _mpv.ObserveProperty("video-params/h", MpvNative.MPV_FORMAT_INT64);
+        _mpv.ObserveProperty("container-fps", MpvNative.MPV_FORMAT_DOUBLE);
 
         _mpv.SetProperty("volume", Volume);
         _initialized = true;
@@ -115,7 +128,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         StatusText = "Pronto — apri una cartella per iniziare.";
     }
 
-    public void Dispose() => _mpv.Dispose();
+    public void Dispose()
+    {
+        _fpsProbe?.Stop();
+        _mpv.Dispose();
+    }
 
     #endregion
 
@@ -433,6 +450,124 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     #endregion
 
+    #region Movimento fluido e HDR
+
+    /// <summary>Frame rate declared by the container; 0 when it declares none.</summary>
+    private double _sourceFps;
+
+    /// <summary>
+    /// Frame rate measured from the decoded frames, used only when the container
+    /// declares none — common for VP9/AV1 web downloads in MKV/WebM.
+    /// </summary>
+    private double _estimatedFps;
+
+    /// <summary>
+    /// Polls estimated-vf-fps instead of observing it: that property changes on
+    /// nearly every frame, and one settled reading is all the decision needs.
+    /// </summary>
+    private DispatcherTimer? _fpsProbe;
+    private int _fpsProbeTicks;
+    private const int FpsProbeMaxTicks = 10;   // 10 × 500 ms, then give up
+
+    /// <summary>Interpolation state currently set in mpv; null until first applied.</summary>
+    private bool? _smoothApplied;
+
+    private SmoothMotionMode _smoothMode = SmoothMotionMode.Auto;
+    public SmoothMotionMode SmoothMode
+    {
+        get => _smoothMode;
+        set { if (Set(ref _smoothMode, value)) ApplySmoothMotion(); }
+    }
+
+    private string _smoothStatus = "Fluido: —";
+    public string SmoothStatus
+    {
+        get => _smoothStatus;
+        private set => Set(ref _smoothStatus, value);
+    }
+
+    /// <summary>
+    /// Turns interpolation on or off for the current source. Both properties are
+    /// switched live, without reloading the file.
+    /// </summary>
+    private void ApplySmoothMotion()
+    {
+        if (!_initialized) return;
+
+        bool estimated = _sourceFps <= 0;
+        double rate = estimated ? _estimatedFps : _sourceFps;
+        string fps = (estimated ? "~" : "")
+                     + rate.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+        // A rate that is still unknown stays off in Auto: retiming a stream whose
+        // cadence we cannot see is more likely to hurt than help.
+        (bool wanted, string status) = SmoothMode switch
+        {
+            SmoothMotionMode.Always => (true, "Fluido attivo — sempre ON"),
+            SmoothMotionMode.Off => (false, "Fluido off — disattivato"),
+            _ when rate <= 0 => (false, "Fluido off — fps sconosciuti"),
+            _ when rate < SmoothMotion.AutoMaxSourceFps => (true, $"Fluido attivo — {fps} fps"),
+            _ => (false, $"Fluido off — sorgente {fps} fps ≥ {SmoothMotion.AutoMaxSourceFps:0}"),
+        };
+
+        SmoothStatus = status;
+        if (wanted == _smoothApplied) return;
+
+        _mpv.SetProperty("video-sync", wanted ? SmoothMotion.SyncOn : SmoothMotion.SyncOff);
+        _mpv.SetProperty("interpolation", wanted);
+        _smoothApplied = wanted;
+    }
+
+    private void StartFpsProbe()
+    {
+        if (_fpsProbe is null)
+        {
+            _fpsProbe = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(500),
+            };
+            _fpsProbe.Tick += OnFpsProbeTick;
+        }
+
+        _fpsProbeTicks = 0;
+        _fpsProbe.Stop();
+        _fpsProbe.Start();
+    }
+
+    private void OnFpsProbeTick(object? sender, EventArgs e)
+    {
+        // The first readings after a load are still settling, so skip one tick.
+        if (++_fpsProbeTicks > 1 && _mpv.GetDouble("estimated-vf-fps") is > 0 and var est)
+        {
+            _fpsProbe!.Stop();
+            _estimatedFps = est;
+            ApplySmoothMotion();
+        }
+        else if (_fpsProbeTicks >= FpsProbeMaxTicks)
+        {
+            _fpsProbe!.Stop();
+        }
+    }
+
+    private bool _hdrPassthrough;
+    /// <summary>
+    /// Hands HDR10 metadata to the display instead of tone-mapping to SDR — only
+    /// meaningful on an HDR monitor with HDR enabled in Windows.
+    /// </summary>
+    public bool HdrPassthrough
+    {
+        get => _hdrPassthrough;
+        set
+        {
+            if (!Set(ref _hdrPassthrough, value)) return;
+            // As a string: newer mpv builds made this a choice (auto/yes/no), which
+            // would reject a flag-typed write.
+            if (_initialized) _mpv.SetProperty("target-colorspace-hint", value ? "yes" : "no");
+        }
+    }
+
+    #endregion
+
     #region mpv property plumbing
 
     private void OnMpvPropertyChanged(object? sender, MpvPropertyChangedEventArgs e)
@@ -458,6 +593,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 case "video-params/h":
                     _sourceHeight = e.Value is long h ? (int)h : 0;
                     ApplyVsr();
+                    break;
+
+                case "container-fps":
+                    _sourceFps = e.Value is double fps ? fps : 0;
+                    _estimatedFps = 0;
+                    if (_sourceFps <= 0 && CurrentItem is not null) StartFpsProbe();
+                    else _fpsProbe?.Stop();
+                    ApplySmoothMotion();
                     break;
             }
         });

@@ -168,6 +168,15 @@
                         <TextBlock Text="{Binding VsrStatus}" VerticalAlignment="Center"
                                    Foreground="{StaticResource Muted}" FontSize="12" Margin="0,0,10,0"/>
 
+                        <ComboBox x:Name="SmoothModeBox" Width="150" VerticalAlignment="Center"
+                                  Margin="0,0,8,0"
+                                  SelectionChanged="SmoothModeBox_SelectionChanged"
+                                  ToolTip="{Binding SmoothStatus}">
+                            <ComboBoxItem Content="Fluido: Auto &lt;45 fps" IsSelected="True"/>
+                            <ComboBoxItem Content="Fluido: sempre ON"/>
+                            <ComboBoxItem Content="Fluido: sempre OFF"/>
+                        </ComboBox>
+
                         <ComboBox x:Name="VsrModeBox" Width="150" VerticalAlignment="Center"
                                   SelectionChanged="VsrModeBox_SelectionChanged"
                                   ToolTip="NVIDIA RTX Video Super Resolution">
@@ -179,6 +188,10 @@
                         <CheckBox Content="RTX HDR" VerticalAlignment="Center" Margin="10,0,0,0"
                                   IsChecked="{Binding TrueHdr}" Foreground="{StaticResource Muted}"
                                   ToolTip="RTX Video HDR — utile solo su schermo HDR"/>
+
+                        <CheckBox Content="HDR nativo" VerticalAlignment="Center" Margin="10,0,0,0"
+                                  IsChecked="{Binding HdrPassthrough}" Foreground="{StaticResource Muted}"
+                                  ToolTip="Passa i metadati HDR10 allo schermo — solo su monitor HDR con HDR attivo in Windows"/>
 
                         <Button Style="{StaticResource Transport}" Content="⛶" Margin="6,0,0,0"
                                 Click="Fullscreen_Click" ToolTip="Schermo intero (F11)"/>
