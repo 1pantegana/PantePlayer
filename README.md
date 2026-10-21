@@ -6,7 +6,7 @@ Lettore video desktop per Windows ottimizzato per Ryzen 9000 + RTX 5080:
 
 * riproduce in sequenza tutti i video di una cartella, con playlist laterale.
 
-* codice ottimizzato per sfruttare istruzioni moderne
+* motore di riproduzione (libmpv/FFmpeg) compilato per x86-64-v3 (AVX2), adatto a Zen 5
 
 ## Come si usa
 
