@@ -18,7 +18,7 @@ Oppure lancia l'eseguibile passando una cartella (o un file: viene aperta la sua
 cartella), così funziona anche come destinazione di "Apri con":
 
 ```bash
-"src/LettoreVideo/bin/Release/net8.0-windows/win-x64/LettoreVideo.exe" "D:\Video"
+"src/LettoreVideo/bin/Release/net10.0-windows/win-x64/LettoreVideo.exe" "D:\Video"
 ```
 
 Comandi da tastiera: `Spazio` play/pausa, `←`/`→` ±5 s, `PagSu`/`PagGiù` video
