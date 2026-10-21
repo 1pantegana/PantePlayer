@@ -45,8 +45,9 @@ Il selettore in basso a destra ha tre stati:
 
 La VSR viene applicata a caldo con `vf set`, senza interrompere la riproduzione,
 e il fattore di upscale è calcolato sull'altezza reale in pixel dell'area video
-(limite 4×, il massimo supportato da NVIDIA). L'indicatore accanto al selettore
-mostra sempre lo stato effettivo e il perché.
+(limite 4×, il massimo supportato da NVIDIA). Quando la VSR è attiva il selettore
+ha una cornice verde e accanto compare il fattore (`VSR ×2.56`); passando il mouse
+sulla scritta si vedono risoluzione della sorgente o motivo dello spegnimento.
 
 `RTX HDR` (`nvidia-true-hdr`) converte SDR→HDR: ha senso solo su schermo HDR.
 
@@ -77,7 +78,10 @@ fonde i fotogrammi solo nei passaggi e lascia nitidi gli altri), applicati a cal
 Per restare agganciato, l'audio viene ricampionato di una frazione di punto
 percentuale: non si sente. Se il contenitore non dichiara gli fps (capita con i
 VP9/AV1 scaricati dal web), il lettore li misura sui primi fotogrammi decodificati.
-Il tooltip del selettore mostra stato e motivo.
+Quando è attivo il selettore ha una cornice verde; il tooltip mostra stato e motivo.
+
+Non crea fotogrammi intermedi stimando il movimento: un film a 24 fps resta a 24
+fps, ma con una cadenza regolare invece dell'alternanza 3:2 tipica dei 60 Hz.
 
 ## HDR nativo
 

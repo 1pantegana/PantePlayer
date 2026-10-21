@@ -110,8 +110,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _mpv.PropertyChanged += OnMpvPropertyChanged;
         _mpv.EndFile += OnMpvEndFile;
 
-        // A file that actually opened clears the failure streak.
-        _mpv.FileLoaded += (_, _) => _dispatcher.BeginInvoke(() => _consecutiveFailures = 0);
+        _mpv.FileLoaded += (_, _) => _dispatcher.BeginInvoke(() =>
+        {
+            // A file that actually opened clears the failure streak.
+            _consecutiveFailures = 0;
+
+            // Read the declared rate here instead of observing container-fps: mpv
+            // sends no change event while the property stays unavailable, so two
+            // files without a declared rate in a row (or the first file after idle)
+            // would never re-trigger the estimate, leaving a stale or missing rate.
+            SetSourceFps(_mpv.GetDouble("container-fps") ?? 0);
+        });
 
         _mpv.LoopFailed += (_, ex) => _dispatcher.BeginInvoke(() =>
             StatusText = $"Il motore di riproduzione si è arrestato: {ex.Message}");
@@ -120,7 +129,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _mpv.ObserveProperty("duration", MpvNative.MPV_FORMAT_DOUBLE);
         _mpv.ObserveProperty("pause", MpvNative.MPV_FORMAT_FLAG);
         _mpv.ObserveProperty("video-params/h", MpvNative.MPV_FORMAT_INT64);
-        _mpv.ObserveProperty("container-fps", MpvNative.MPV_FORMAT_DOUBLE);
 
         _mpv.SetProperty("volume", Volume);
         _initialized = true;
@@ -363,11 +371,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         set { if (Set(ref _trueHdr, value)) ApplyVsr(); }
     }
 
-    private string _vsrStatus = "RTX VSR: —";
+    private string _vsrStatus = "VSR —";
     public string VsrStatus
     {
         get => _vsrStatus;
         private set => Set(ref _vsrStatus, value);
+    }
+
+    private string _vsrDetail = "RTX VSR: —";
+    /// <summary>Full explanation behind the short <see cref="VsrStatus"/> label (tooltip).</summary>
+    public string VsrDetail
+    {
+        get => _vsrDetail;
+        private set => Set(ref _vsrDetail, value);
     }
 
     private bool _vsrActive;
@@ -424,15 +440,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             ? $"{w}×{_sourceHeight}"
             : $"{_sourceHeight}p";
 
-        VsrStatus = $"RTX VSR attivo — {source} ×{scale.Value:0.##}"
-                    + (TrueHdr ? " + RTX HDR" : string.Empty);
+        string factor = scale.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        VsrStatus = $"VSR ×{factor}" + (TrueHdr ? " + HDR" : string.Empty);
+        VsrDetail = $"RTX VSR attivo — {source} ×{factor}" + (TrueHdr ? " + RTX HDR" : string.Empty);
     }
 
     private void SetVsrOff(string reason)
     {
         SetFilter(string.Empty);
         VsrActive = false;
-        VsrStatus = $"RTX VSR off — {reason}";
+        VsrStatus = "VSR off";
+        VsrDetail = $"RTX VSR off — {reason}";
     }
 
     /// <summary>
@@ -486,6 +504,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         private set => Set(ref _smoothStatus, value);
     }
 
+    private bool _smoothActive;
+    public bool SmoothActive
+    {
+        get => _smoothActive;
+        private set => Set(ref _smoothActive, value);
+    }
+
     /// <summary>
     /// Turns interpolation on or off for the current source. Both properties are
     /// switched live, without reloading the file.
@@ -510,12 +535,29 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _ => (false, $"Fluido off — sorgente {fps} fps ≥ {SmoothMotion.AutoMaxSourceFps:0}"),
         };
 
-        SmoothStatus = status;
+        // With nothing on screen the mode still holds for the next file, but the
+        // indicator must not claim that anything is being interpolated.
+        bool hasVideo = _sourceHeight > 0;
+        SmoothStatus = hasVideo ? status : "Fluido off — nessun video";
+        SmoothActive = wanted && hasVideo;
         if (wanted == _smoothApplied) return;
 
         _mpv.SetProperty("video-sync", wanted ? SmoothMotion.SyncOn : SmoothMotion.SyncOff);
         _mpv.SetProperty("interpolation", wanted);
         _smoothApplied = wanted;
+    }
+
+    /// <summary>
+    /// Takes the rate the container declares for the file just loaded (0 = none),
+    /// dropping any estimate left over from the previous file.
+    /// </summary>
+    private void SetSourceFps(double containerFps)
+    {
+        _sourceFps = containerFps;
+        _estimatedFps = 0;
+        if (_sourceFps <= 0) StartFpsProbe();
+        else _fpsProbe?.Stop();
+        ApplySmoothMotion();
     }
 
     private void StartFpsProbe()
@@ -593,14 +635,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 case "video-params/h":
                     _sourceHeight = e.Value is long h ? (int)h : 0;
                     ApplyVsr();
-                    break;
-
-                case "container-fps":
-                    _sourceFps = e.Value is double fps ? fps : 0;
-                    _estimatedFps = 0;
-                    if (_sourceFps <= 0 && CurrentItem is not null) StartFpsProbe();
-                    else _fpsProbe?.Stop();
-                    ApplySmoothMotion();
+                    ApplySmoothMotion();   // the "active" indicator follows the video
                     break;
             }
         });
