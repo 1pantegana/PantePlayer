@@ -191,8 +191,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         string fps = info.Fps > 0
             ? " " + info.Fps.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " fps"
             : string.Empty;
-        StatusText = $"{info.Width}×{info.Height}{fps} · {info.Codec} · "
-                     + (info.HardwareDecoding ? "decodifica Vulkan" : "decodifica software");
+        StatusText = $"{info.Width}×{info.Height}{fps} · {info.Codec} · decodifica Vulkan";
     }
 
     private void OnEngineEndFile(object? sender, EndFileEventArgs e)

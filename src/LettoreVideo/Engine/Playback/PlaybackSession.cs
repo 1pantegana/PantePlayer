@@ -45,7 +45,6 @@ internal sealed unsafe class PlaybackSession : IDisposable
     public int Width { get; }
     public int Height { get; }
     public double NominalFps => _video.NominalFps;
-    public bool HardwareDecoding => _video.Hardware;
     public string CodecName => _video.CodecName;
 
     /// <summary>Media position relative to the file start, every quarter second.</summary>
@@ -54,7 +53,7 @@ internal sealed unsafe class PlaybackSession : IDisposable
     /// <summary>Natural end (null) or failure (the error).</summary>
     public event Action<Exception?>? Ended;
 
-    public PlaybackSession(string path, VulkanHwDevice? hwDevice, IVideoPresenter? presenter, PlaybackStats stats)
+    public PlaybackSession(string path, VulkanHwDevice hwDevice, IVideoPresenter? presenter, PlaybackStats stats)
     {
         _presenter = presenter;
         _stats = stats;

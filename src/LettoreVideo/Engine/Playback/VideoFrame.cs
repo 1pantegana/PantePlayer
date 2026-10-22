@@ -8,7 +8,7 @@ internal enum PlaneLayout
     Nv12,
     /// <summary>10-bit in 16-bit words, same layout as NV12.</summary>
     P010,
-    /// <summary>Anything else (software decoding): the renderer has to convert it.</summary>
+    /// <summary>Any other layout of the Vulkan frames (4:2:2, 4:4:4): not handled yet.</summary>
     Other,
 }
 

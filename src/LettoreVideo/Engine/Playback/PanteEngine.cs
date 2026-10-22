@@ -14,7 +14,7 @@ public sealed class EndFileEventArgs(bool reachedEnd, Exception? error) : EventA
 }
 
 /// <summary>What the UI shows about the file that just opened.</summary>
-public sealed record MediaInfo(string Path, double Duration, int Width, int Height, double Fps, string Codec, bool HardwareDecoding);
+public sealed record MediaInfo(string Path, double Duration, int Width, int Height, double Fps, string Codec);
 
 /// <summary>
 /// The playback engine as the view model sees it. Every event is raised on an
@@ -25,7 +25,6 @@ public sealed class PanteEngine : IDisposable
     private readonly object _sync = new();
     private readonly PlaybackStats _stats = new();
     private VulkanHwDevice? _hwDevice;
-    private bool _hwDeviceTried;
     private PlaybackSession? _session;
     private int _generation;
     private bool _paused;
@@ -88,6 +87,7 @@ public sealed class PanteEngine : IDisposable
         }
         catch (Exception ex)
         {
+            _stats.Note($"{System.IO.Path.GetFileName(path)}: rifiutato, {ex.Message}");
             if (IsCurrent(generation))
                 EndFile?.Invoke(this, new EndFileEventArgs(false, ex));
             return;
@@ -113,9 +113,8 @@ public sealed class PanteEngine : IDisposable
         };
 
         var info = new MediaInfo(path, session.Duration, session.Width, session.Height,
-            session.NominalFps, session.CodecName, session.HardwareDecoding);
-        _stats.Note($"{System.IO.Path.GetFileName(path)}: {info.Width}x{info.Height} {info.Fps:0.###} fps, "
-                    + $"{info.Codec}, {(info.HardwareDecoding ? "Vulkan" : "software")}");
+            session.NominalFps, session.CodecName);
+        _stats.Note($"{System.IO.Path.GetFileName(path)}: {info.Width}x{info.Height} {info.Fps:0.###} fps, {info.Codec}");
         FileLoaded?.Invoke(this, info);
         session.Start();
     }
@@ -125,20 +124,22 @@ public sealed class PanteEngine : IDisposable
         lock (_sync) return generation == _generation && !_disposed;
     }
 
-    /// <summary>The shared Vulkan device; null (software decoding) if it cannot be created.</summary>
-    private VulkanHwDevice? HwDevice()
+    /// <summary>The shared Vulkan device, created on first use. Without it nothing plays.</summary>
+    private VulkanHwDevice HwDevice()
     {
         lock (_sync)
         {
-            if (_hwDeviceTried) return _hwDevice;
-            _hwDeviceTried = true;
-            try
+            if (_hwDevice is null)
             {
-                _hwDevice = new VulkanHwDevice();
-            }
-            catch (Exception ex)
-            {
-                _stats.Note($"Vulkan non disponibile, decodifica software: {ex.Message}");
+                try
+                {
+                    _hwDevice = new VulkanHwDevice();
+                }
+                catch (Exception ex)
+                {
+                    _stats.Note($"Vulkan non disponibile: {ex.Message}");
+                    throw new NotSupportedException($"Vulkan non disponibile: {ex.Message}", ex);
+                }
             }
             return _hwDevice;
         }
