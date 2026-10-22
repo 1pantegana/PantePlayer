@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <!-- The engine talks to FFmpeg and D3D11 through raw pointers. -->
+    <!-- The engine talks to FFmpeg, Vulkan and COM through raw pointers (no NuGet: interop is ours). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- The FFmpeg DLLs are native x64 binaries: the app must never build as AnyCPU. -->
     <PlatformTarget>x64</PlatformTarget>
@@ -24,18 +24,11 @@
 
   <ItemGroup>
     <!-- FFmpeg shared build, loaded at runtime from "ffmpeg\" next to the exe
-         (ffmpeg.RootPath). Not in git: see README. -->
+         (FFmpegLoader). Not in git: see README. -->
     <None Include="runtimes\win-x64\native\ffmpeg\*.dll">
       <Link>ffmpeg\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="FFmpeg.AutoGen" Version="9.0.1.1" />
-    <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
-    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
-    <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
   </ItemGroup>
 
 </Project>

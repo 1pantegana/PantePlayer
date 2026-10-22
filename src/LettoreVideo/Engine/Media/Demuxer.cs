@@ -1,4 +1,4 @@
-using FFmpeg.AutoGen;
+using LettoreVideo.Engine.Interop;
 
 namespace LettoreVideo.Engine.Media;
 
@@ -23,18 +23,18 @@ internal sealed unsafe class Demuxer : IDisposable
     public Demuxer(string path)
     {
         AVFormatContext* fmt = null;
-        FFmpegLoader.Check(ffmpeg.avformat_open_input(&fmt, path, null, null), "apertura del file");
+        FFmpegLoader.Check(AvFormat.avformat_open_input(&fmt, path, null, null), "apertura del file");
         _fmt = fmt;
 
         try
         {
-            FFmpegLoader.Check(ffmpeg.avformat_find_stream_info(_fmt, null), "lettura degli stream");
+            FFmpegLoader.Check(AvFormat.avformat_find_stream_info(_fmt, null), "lettura degli stream");
 
-            VideoIndex = ffmpeg.av_find_best_stream(_fmt, AVMediaType.AVMEDIA_TYPE_VIDEO, -1, -1, null, 0);
-            if (VideoIndex >= 0 && (VideoStream->disposition & ffmpeg.AV_DISPOSITION_ATTACHED_PIC) != 0)
+            VideoIndex = AvFormat.av_find_best_stream(_fmt, Av.MediaTypeVideo, -1, -1, null, 0);
+            if (VideoIndex >= 0 && (VideoStream->disposition & Av.DispositionAttachedPic) != 0)
                 VideoIndex = -1;   // cover art of an audio file is not a video
 
-            AudioIndex = ffmpeg.av_find_best_stream(_fmt, AVMediaType.AVMEDIA_TYPE_AUDIO, -1,
+            AudioIndex = AvFormat.av_find_best_stream(_fmt, Av.MediaTypeAudio, -1,
                 VideoIndex >= 0 ? VideoIndex : -1, null, 0);
             if (AudioIndex < 0) AudioIndex = -1;
 
@@ -44,10 +44,10 @@ internal sealed unsafe class Demuxer : IDisposable
             // Everything else is never decoded: tell the demuxer not to bother.
             for (int i = 0; i < _fmt->nb_streams; i++)
                 if (i != VideoIndex && i != AudioIndex)
-                    _fmt->streams[i]->discard = AVDiscard.AVDISCARD_ALL;
+                    _fmt->streams[i]->discard = Av.DiscardAll;
 
-            StartTime = _fmt->start_time != ffmpeg.AV_NOPTS_VALUE ? _fmt->start_time / (double)ffmpeg.AV_TIME_BASE : 0;
-            Duration = _fmt->duration > 0 ? _fmt->duration / (double)ffmpeg.AV_TIME_BASE : 0;
+            StartTime = _fmt->start_time != Av.NoPtsValue ? _fmt->start_time / (double)Av.TimeBase : 0;
+            Duration = _fmt->duration > 0 ? _fmt->duration / (double)Av.TimeBase : 0;
         }
         catch
         {
@@ -57,15 +57,15 @@ internal sealed unsafe class Demuxer : IDisposable
     }
 
     /// <summary>Reads the next packet into <paramref name="packet"/>; AVERROR_EOF at the end.</summary>
-    public int Read(AVPacket* packet) => ffmpeg.av_read_frame(_fmt, packet);
+    public int Read(AVPacket* packet) => AvFormat.av_read_frame(_fmt, packet);
 
     /// <summary>Seeks to the keyframe at or before <paramref name="mediaSeconds"/>.</summary>
     public void Seek(double mediaSeconds)
     {
-        long ts = (long)(mediaSeconds * ffmpeg.AV_TIME_BASE);
-        int r = ffmpeg.avformat_seek_file(_fmt, -1, long.MinValue, ts, ts, 0);
+        long ts = (long)(mediaSeconds * Av.TimeBase);
+        int r = AvFormat.avformat_seek_file(_fmt, -1, long.MinValue, ts, ts, 0);
         if (r < 0)
-            r = ffmpeg.av_seek_frame(_fmt, -1, ts, ffmpeg.AVSEEK_FLAG_BACKWARD);
+            r = AvFormat.av_seek_frame(_fmt, -1, ts, Av.SeekFlagBackward);
         FFmpegLoader.Check(r, "seek");
     }
 
@@ -73,7 +73,7 @@ internal sealed unsafe class Demuxer : IDisposable
     {
         if (_fmt == null) return;
         AVFormatContext* fmt = _fmt;
-        ffmpeg.avformat_close_input(&fmt);
+        AvFormat.avformat_close_input(&fmt);
         _fmt = null;
     }
 }

@@ -1,4 +1,4 @@
-using FFmpeg.AutoGen;
+using LettoreVideo.Engine.Interop;
 
 namespace LettoreVideo.Engine.Media;
 
@@ -17,17 +17,27 @@ internal sealed unsafe class PacketQueue : IDisposable
 
     private readonly Queue<Entry> _items = new();
     private readonly object _sync = new();
+    private readonly int _capacity;
     private bool _closed;
+
+    /// <param name="capacity">Packets queued before <see cref="Put"/> blocks the demuxer.</param>
+    public PacketQueue(int capacity) => _capacity = capacity;
 
     public int Count { get { lock (_sync) return _items.Count; } }
     public long Bytes { get { lock (_sync) return _bytes; } }
     private long _bytes;
 
-    /// <summary>Takes ownership of <paramref name="packet"/> (null = drain marker).</summary>
+    /// <summary>
+    /// Takes ownership of <paramref name="packet"/> (null = drain marker), waiting
+    /// while the queue is full. <see cref="Clear"/> and <see cref="Close"/> wake it.
+    /// </summary>
     public void Put(AVPacket* packet, int serial)
     {
         lock (_sync)
         {
+            while (!_closed && _items.Count >= _capacity)
+                Monitor.Wait(_sync);
+
             if (_closed)
             {
                 Free(packet);
@@ -92,6 +102,6 @@ internal sealed unsafe class PacketQueue : IDisposable
     public static void Free(AVPacket* packet)
     {
         if (packet == null) return;
-        ffmpeg.av_packet_free(&packet);
+        AvCodec.av_packet_free(&packet);
     }
 }
