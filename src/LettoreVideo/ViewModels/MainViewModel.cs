@@ -4,7 +4,8 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Threading;
-using LettoreVideo.Mpv;
+using LettoreVideo.Engine;
+using LettoreVideo.Engine.Playback;
 using LettoreVideo.Playlist;
 using Microsoft.Win32;
 
@@ -12,7 +13,7 @@ namespace LettoreVideo.ViewModels;
 
 public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
-    private readonly MpvClient _mpv = new();
+    private readonly PanteEngine _engine = new();
     private readonly Dispatcher _dispatcher = Application.Current.Dispatcher;
 
     private bool _initialized;
@@ -47,81 +48,39 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     #region Attach / teardown
 
-    /// <summary>
-    /// Wires mpv to the native surface. Called once the host window handle exists,
-    /// because "wid" must be set before mpv_initialize.
-    /// </summary>
+    /// <summary>Wires the engine to the native surface, once the host window handle exists.</summary>
     public void Attach(IntPtr videoHandle)
     {
         if (_initialized) return;
 
-        _mpv.Create();
-
-        // --- Rendering: D3D11 end to end, so NVDEC frames never leave the GPU. ---
-        _mpv.SetOption("wid", videoHandle.ToInt64().ToString());
-        _mpv.SetOption("vo", "gpu-next");
-        _mpv.SetOption("gpu-api", "d3d11");
-        _mpv.SetOption("gpu-context", "d3d11");
-        _mpv.SetOption("profile", "high-quality");
-
-        // --- HDR passthrough: off until the user enables it. With gpu-next on D3D11
-        //     the hint also switches the swapchain to HDR10 by itself, so the output
-        //     format stays on auto — a fixed 10-bit swapchain would only cost an SDR
-        //     monitor its 8-bit dithering. ---
-        _mpv.SetOption("target-colorspace-hint", "no");
-
-        // --- Decoding: NVDEC on the RTX 5080, keeping frames in D3D11 textures
-        //     (plain "d3d11va", never "-copy", which is what d3d11vpp requires). ---
-        _mpv.SetOption("hwdec", "d3d11va");
-        _mpv.SetOption("hwdec-codecs", "all");
-
-        // --- CPU side: let ffmpeg spread demux/filter work over the Ryzen's cores. ---
-        _mpv.SetOption("vd-lavc-threads", "0");
-        _mpv.SetOption("ad-lavc-threads", "0");
-        _mpv.SetOption("cache", "yes");
-        _mpv.SetOption("demuxer-max-bytes", "256MiB");
-
-        // --- Playback behaviour: we drive the playlist ourselves. ---
-        // keep-open must stay off: with it enabled mpv parks on the last frame and
-        // never emits end-file, which is exactly the event the auto-advance needs.
-        _mpv.SetOption("keep-open", "no");
-        _mpv.SetOption("idle", "yes");          // stay alive between files
-        _mpv.SetOption("force-window", "yes");  // keep the surface painted while idle
-        _mpv.SetOption("osc", "no");            // the WPF controls are the UI
-        _mpv.SetOption("input-default-bindings", "no");
-        _mpv.SetOption("input-vo-keyboard", "no");
-
-        // Diagnostics: set LETTOREVIDEO_MPVLOG to a path to capture mpv's own log
-        // (shows which hwdec was picked and how the filter chain was built).
-        if (Environment.GetEnvironmentVariable("LETTOREVIDEO_MPVLOG") is { Length: > 0 } logPath)
+        try
         {
-            _mpv.SetOption("log-file", logPath);
-            _mpv.SetOption("msg-level", "all=v");
+            _engine.Attach(videoHandle);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Motore di riproduzione non disponibile: {ex.Message}";
+            return;
         }
 
-        _mpv.Initialize();
+        _engine.EndFile += OnEngineEndFile;
+        _engine.FileLoaded += (_, info) => _dispatcher.BeginInvoke(() => OnFileLoaded(info));
+        _engine.PausedChanged += (_, paused) => _dispatcher.BeginInvoke(() => IsPaused = paused);
+        _engine.PositionChanged += (_, pos) => _dispatcher.BeginInvoke(() =>
+        {
+            if (_seeking) return;
+            _position = pos;
+            OnPropertyChanged(nameof(Position));
+            OnPropertyChanged(nameof(PositionText));
+        });
 
-        _mpv.PropertyChanged += OnMpvPropertyChanged;
-        _mpv.EndFile += OnMpvEndFile;
-
-        // A file that actually opened clears the failure streak.
-        _mpv.FileLoaded += (_, _) => _dispatcher.BeginInvoke(() => _consecutiveFailures = 0);
-
-        _mpv.LoopFailed += (_, ex) => _dispatcher.BeginInvoke(() =>
-            StatusText = $"Il motore di riproduzione si è arrestato: {ex.Message}");
-
-        _mpv.ObserveProperty("time-pos", MpvNative.MPV_FORMAT_DOUBLE);
-        _mpv.ObserveProperty("duration", MpvNative.MPV_FORMAT_DOUBLE);
-        _mpv.ObserveProperty("pause", MpvNative.MPV_FORMAT_FLAG);
-        _mpv.ObserveProperty("video-params/h", MpvNative.MPV_FORMAT_INT64);
-
-        _mpv.SetProperty("volume", Volume);
+        _engine.Volume = Volume;
         _initialized = true;
 
         StatusText = "Pronto — apri una cartella per iniziare.";
     }
 
-    public void Dispose() => _mpv.Dispose();
+    public void Dispose() => _engine.Dispose();
 
     #endregion
 
@@ -214,11 +173,28 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Position = 0;
         Duration = 0;
 
-        _mpv.Command("loadfile", Playlist[index].Path, "replace");
-        _mpv.SetProperty("pause", false);
+        if (!_initialized) return;
+
+        _engine.Load(Playlist[index].Path);
+        _engine.SetPaused(false);
     }
 
-    private void OnMpvEndFile(object? sender, MpvEndFileEventArgs e)
+    private void OnFileLoaded(MediaInfo info)
+    {
+        // A file that actually opened clears the failure streak.
+        _consecutiveFailures = 0;
+        Duration = info.Duration;
+        _sourceWidth = info.Width;
+        _sourceHeight = info.Height;
+        ApplyVsr();
+
+        string fps = info.Fps > 0
+            ? " " + info.Fps.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " fps"
+            : string.Empty;
+        StatusText = $"{info.Width}×{info.Height}{fps} · {info.Codec} · decodifica Vulkan";
+    }
+
+    private void OnEngineEndFile(object? sender, EndFileEventArgs e)
     {
         // Chain forward on a natural end, and also when a file simply cannot be
         // played — one broken entry must not strand the rest of the folder.
@@ -298,11 +274,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         set
         {
             if (!Set(ref _volume, value)) return;
-            if (_initialized) _mpv.SetProperty("volume", value);
+            if (_initialized) _engine.Volume = value;
         }
     }
 
-    private void TogglePause() => _mpv.Command("cycle", "pause");
+    private void TogglePause() => _engine.TogglePause();
 
     /// <summary>Called by the view while the user drags the seek bar.</summary>
     public void BeginSeek() => _seeking = true;
@@ -311,12 +287,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         _seeking = false;
 
-        // Move the bar now instead of waiting for mpv to report the new time-pos:
-        // the "time-pos" events still in flight carry the pre-seek position and
+        // Move the bar now instead of waiting for the engine to report the new
+        // position: the reports still in flight carry the pre-seek position and
         // would otherwise yank the handle back for a frame or two.
         Position = seconds;
 
-        _mpv.Command("seek", seconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), "absolute");
+        _engine.Seek(seconds);
     }
 
     public void ToggleFullscreen() => FullscreenRequested?.Invoke(this, EventArgs.Empty);
@@ -332,24 +308,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     #region RTX Video Super Resolution
 
-    private int _sourceHeight;
+    private int _sourceWidth, _sourceHeight;
 
-    /// <summary>Filter chain currently installed in mpv, to avoid redundant rebuilds.</summary>
-    private string _appliedFilter = string.Empty;
-
-    private RtxVsrMode _vsrMode = RtxVsrMode.Auto;
-    public RtxVsrMode VsrMode
+    private VsrMode _vsrMode = VsrMode.Auto;
+    public VsrMode VsrMode
     {
         get => _vsrMode;
         set { if (Set(ref _vsrMode, value)) ApplyVsr(); }
-    }
-
-    private bool _trueHdr;
-    /// <summary>RTX Video HDR — only meaningful on an HDR-capable display.</summary>
-    public bool TrueHdr
-    {
-        get => _trueHdr;
-        set { if (Set(ref _trueHdr, value)) ApplyVsr(); }
     }
 
     private string _vsrStatus = "VSR —";
@@ -374,10 +339,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         private set => Set(ref _vsrActive, value);
     }
 
-    /// <summary>
-    /// Applies (or clears) the d3d11vpp chain for the current source. Safe to call
-    /// mid-playback: "vf set" swaps the filter chain without reloading the file.
-    /// </summary>
+    /// <summary>Re-evaluates VSR for the current source and surface size.</summary>
     public void ApplyVsr()
     {
         if (!_initialized) return;
@@ -388,117 +350,36 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        bool wanted = VsrMode switch
+        if (!Vsr.Wanted(VsrMode, _sourceHeight))
         {
-            RtxVsrMode.Always => true,
-            RtxVsrMode.Auto => _sourceHeight < RtxVideoFilter.AutoMaxSourceHeight,
-            _ => false,
-        };
-
-        if (!wanted)
-        {
-            string why = VsrMode == RtxVsrMode.Off ? "disattivato" : $"sorgente {_sourceHeight}p già ≥ 1080p";
+            string why = VsrMode == VsrMode.Off ? "disattivato" : $"sorgente {_sourceHeight}p già ≥ 1080p";
             SetVsrOff(why);
             return;
         }
 
         int targetHeight = GetTargetHeight?.Invoke() ?? 0;
-        double? scale = RtxVideoFilter.ComputeScale(_sourceHeight, targetHeight);
+        double? scale = Vsr.ComputeScale(_sourceHeight, targetHeight);
         if (scale is null)
         {
             SetVsrOff("finestra troppo piccola per un upscale utile");
             return;
         }
 
-        SetFilter(RtxVideoFilter.Build(scale.Value, TrueHdr));
-        VsrActive = true;
-
-        // Read the width here rather than caching it from an observed property: it
-        // only ever feeds this label, and a cached copy goes stale the moment mpv
-        // reports the property as unavailable — the notification carries no value,
-        // so the field would silently keep the previous file's width.
-        string source = _mpv.GetLong("video-params/w") is long w
-            ? $"{w}×{_sourceHeight}"
-            : $"{_sourceHeight}p";
-
+        // The RTX Video SDK path arrives with stage 3; until then the shader scales.
         string factor = scale.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-        VsrStatus = $"VSR ×{factor}" + (TrueHdr ? " + HDR" : string.Empty);
-        VsrDetail = $"RTX VSR attivo — {source} ×{factor}" + (TrueHdr ? " + RTX HDR" : string.Empty);
+        SetVsrOff($"servirebbe {_sourceWidth}×{_sourceHeight} ×{factor}, ma nel nuovo motore la VSR arriva con la tappa 3");
     }
 
     private void SetVsrOff(string reason)
     {
-        SetFilter(string.Empty);
         VsrActive = false;
         VsrStatus = "VSR off";
         VsrDetail = $"RTX VSR off — {reason}";
     }
 
-    /// <summary>
-    /// Installs a filter chain only when it differs from the one already running:
-    /// every "vf set" tears down and re-creates the d3d11vpp processor, which is
-    /// far too expensive to repeat on each resize tick.
-    /// </summary>
-    private void SetFilter(string filter)
-    {
-        if (filter == _appliedFilter) return;
-
-        _mpv.Command("vf", "set", filter);
-        _appliedFilter = filter;
-    }
-
     #endregion
 
-    #region HDR nativo
-
-    private bool _hdrPassthrough;
-    /// <summary>
-    /// Hands HDR10 metadata to the display instead of tone-mapping to SDR — only
-    /// meaningful on an HDR monitor with HDR enabled in Windows.
-    /// </summary>
-    public bool HdrPassthrough
-    {
-        get => _hdrPassthrough;
-        set
-        {
-            if (!Set(ref _hdrPassthrough, value)) return;
-            // As a string: newer mpv builds made this a choice (auto/yes/no), which
-            // would reject a flag-typed write.
-            if (_initialized) _mpv.SetProperty("target-colorspace-hint", value ? "yes" : "no");
-        }
-    }
-
-    #endregion
-
-    #region mpv property plumbing
-
-    private void OnMpvPropertyChanged(object? sender, MpvPropertyChangedEventArgs e)
-    {
-        _dispatcher.BeginInvoke(() =>
-        {
-            switch (e.Name)
-            {
-                case "time-pos" when !_seeking && e.Value is double pos:
-                    _position = pos;
-                    OnPropertyChanged(nameof(Position));
-                    OnPropertyChanged(nameof(PositionText));
-                    break;
-
-                case "duration" when e.Value is double dur:
-                    Duration = dur;
-                    break;
-
-                case "pause" when e.Value is bool paused:
-                    IsPaused = paused;
-                    break;
-
-                case "video-params/h":
-                    _sourceHeight = e.Value is long h ? (int)h : 0;
-                    ApplyVsr();
-                    break;
-            }
-        });
-    }
+    #region Status
 
     private string _statusText = string.Empty;
     public string StatusText

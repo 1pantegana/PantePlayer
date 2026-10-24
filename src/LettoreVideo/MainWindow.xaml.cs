@@ -5,7 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using LettoreVideo.Mpv;
+using LettoreVideo.Engine;
 using LettoreVideo.Playlist;
 using LettoreVideo.ViewModels;
 
@@ -22,8 +22,8 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Coalesces the SizeChanged storm of a resize drag into one VSR update:
-    /// re-scaling means rebuilding the d3d11vpp chain, which stutters if done
-    /// on every intermediate size.
+    /// re-scaling means re-creating the upscaler, which stutters if done on
+    /// every intermediate size.
     /// </summary>
     private readonly DispatcherTimer _vsrResizeDebounce = new() { Interval = TimeSpan.FromMilliseconds(250) };
 
@@ -32,7 +32,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = _vm;
 
-        // mpv scales up to the physical pixels of the video surface, not WPF's
+        // The engine scales up to the physical pixels of the video surface, not WPF's
         // device-independent units, so RTX VSR targets the real output resolution.
         _vm.GetTargetHeight = () =>
         {
@@ -43,8 +43,7 @@ public partial class MainWindow : Window
         _vm.FullscreenRequested += (_, _) => ToggleFullscreen();
         _vm.PropertyChanged += OnViewModelPropertyChanged;
 
-        // "wid" has to be set on an uninitialized mpv handle, so we attach as soon
-        // as the native surface exists.
+        // The engine presents into the native surface: attach as soon as it exists.
         VideoHost.SurfaceCreated += (_, _) => _vm.Attach(VideoHost.VideoHandle);
 
         // Re-evaluate the upscale factor once the resize has settled.
@@ -101,7 +100,7 @@ public partial class MainWindow : Window
     /// <summary>
     /// Seeks on a click somewhere along the track. It has to happen on the button
     /// *down*: IsMoveToPointEnabled makes the Slider snap Value to the clicked
-    /// point right there, and waiting for the button up would let a "time-pos"
+    /// point right there, and waiting for the button up would let a position
     /// update arrive in between and pull Value back to the current playback
     /// position through the two-way binding — turning the click into a no-op.
     /// </summary>
@@ -134,9 +133,9 @@ public partial class MainWindow : Window
 
         _vm.VsrMode = VsrModeBox.SelectedIndex switch
         {
-            1 => RtxVsrMode.Always,
-            2 => RtxVsrMode.Off,
-            _ => RtxVsrMode.Auto,
+            1 => VsrMode.Always,
+            2 => VsrMode.Off,
+            _ => VsrMode.Auto,
         };
     }
 

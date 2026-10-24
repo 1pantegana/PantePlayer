@@ -1,14 +1,14 @@
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 
-namespace LettoreVideo.Mpv;
+namespace LettoreVideo;
 
 /// <summary>
-/// Hosts a bare Win32 child window inside the WPF tree. Its HWND is handed to
-/// mpv through the "wid" option, letting mpv own the rendering surface — no
-/// render API plumbing needed on our side.
+/// Hosts a bare Win32 child window inside the WPF tree. The engine attaches a
+/// flip-model DXGI swapchain to its HWND and presents into it from its own
+/// thread, so video never goes through WPF's composition.
 /// </summary>
-public sealed class MpvHost : HwndHost
+public sealed class VideoSurfaceHost : HwndHost
 {
     private const int WS_CHILD = 0x40000000;
     private const int WS_VISIBLE = 0x10000000;
@@ -17,17 +17,17 @@ public sealed class MpvHost : HwndHost
 
     private IntPtr _hwnd;
 
-    /// <summary>Handle to pass to mpv's "wid" option. Valid once the control is loaded.</summary>
+    /// <summary>Handle the swapchain is created on. Valid once the control is loaded.</summary>
     public IntPtr VideoHandle => _hwnd;
 
-    /// <summary>Raised once the native surface exists and mpv can be attached to it.</summary>
+    /// <summary>Raised once the native surface exists and the engine can be attached to it.</summary>
     public event EventHandler? SurfaceCreated;
 
     protected override HandleRef BuildWindowCore(HandleRef hwndParent)
     {
         _hwnd = CreateWindowEx(
             0,
-            "static",              // A plain STATIC control is enough: mpv paints over it.
+            "static",              // A plain STATIC control is enough: the swapchain covers it.
             string.Empty,
             WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
             0, 0, 1, 1,

@@ -1,7 +1,7 @@
 <Window x:Class="LettoreVideo.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:mpv="clr-namespace:LettoreVideo.Mpv"
+        xmlns:local="clr-namespace:LettoreVideo"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         Title="Lettore Video" Height="720" Width="1280"
         MinHeight="420" MinWidth="720"
@@ -72,9 +72,9 @@
             <ColumnDefinition Width="300" x:Name="PlaylistColumn"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Video surface: mpv renders straight into this native child window. -->
+        <!-- Video surface: the engine presents straight into this native child window. -->
         <Border Grid.Row="0" Grid.Column="0" Background="Black" ClipToBounds="True">
-            <mpv:MpvHost x:Name="VideoHost"/>
+            <local:VideoSurfaceHost x:Name="VideoHost"/>
         </Border>
 
         <GridSplitter Grid.Row="0" Grid.Column="1" Width="4"
@@ -197,14 +197,6 @@
                                 <ComboBoxItem Content="RTX VSR: sempre OFF"/>
                             </ComboBox>
                         </Border>
-
-                        <CheckBox Content="RTX HDR" VerticalAlignment="Center" Margin="10,0,0,0"
-                                  IsChecked="{Binding TrueHdr}" Foreground="{StaticResource Muted}"
-                                  ToolTip="RTX Video HDR — utile solo su schermo HDR"/>
-
-                        <CheckBox Content="HDR nativo" VerticalAlignment="Center" Margin="10,0,0,0"
-                                  IsChecked="{Binding HdrPassthrough}" Foreground="{StaticResource Muted}"
-                                  ToolTip="Passa i metadati HDR10 allo schermo — solo su monitor HDR con HDR attivo in Windows"/>
 
                         <Button Style="{StaticResource Transport}" Content="⛶" Margin="6,0,0,0"
                                 Click="Fullscreen_Click" ToolTip="Schermo intero (F11)"/>
